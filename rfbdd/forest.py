@@ -96,3 +96,117 @@ class Tree:
             stack.append((int(self.right[node]), acc + [(node, f, 0)]))
             stack.append((int(self.left[node]), acc + [(node, f, 1)]))
         return out
+
+
+@dataclass
+class Forest:
+    """Represents a random forest as a collection of decision trees.
+
+    The forest is composed of ``D`` trees, denoted by
+    ``F = {T_0, ..., T_{D-1}}``.
+
+    Attributes
+    ----------
+    trees
+        List of decision trees contained in the forest.
+    n_features
+        Number of input features used by the trees.
+    n_classes
+        Number of possible output classes.
+    classes
+        Array containing the actual class labels.
+    name
+        Name of the dataset or forest.
+    meta
+        Additional metadata associated with the forest.
+
+    The forest uses hard majority voting: each tree produces one class label,
+    and the class receiving the most votes is the forest prediction.
+    """
+
+    trees: list[Tree]
+    n_features: int
+    n_classes: int
+    classes: np.ndarray
+    name: str = ""
+    meta: dict = field(default_factory=dict)
+
+    @property
+    def n_trees(self) -> int:
+        """Number of trees in the forest."""
+        return len(self.trees)
+
+    @property
+    def D(self) -> int:
+        """Number of trees in the forest."""
+        return len(self.trees)
+
+    @property
+    def W(self) -> int:  # noqa: N802
+        """Minimum number of trees needed to win a majority vote."""
+        return self.D // 2 + 1
+
+    def prefix(self, k: int) -> "Forest":
+        """
+        Returns a new forest containing only the first ``k`` trees.
+
+        If ``k`` is smaller than 1 or larger than the number of trees,
+        it is adjusted to the valid range.
+        """
+        k = max(1, min(k, self.n_trees))
+        return Forest(
+            trees=self.trees[:k],
+            n_features=self.n_features,
+            n_classes=self.n_classes,
+            classes=self.classes,
+            name=self.name,
+            meta=dict(self.meta),
+        )
+
+    # -- reference (non symbolic) semantics -------------------------------- #
+    def votes(self, x: np.ndarray) -> np.ndarray:
+        """Returns the number of votes received by each class for sample ``x``."""
+        v = np.zeros(self.n_classes, dtype=np.int64)
+        for t in self.trees:
+            v[t.decide(x)] += 1
+        return v
+
+    def predict_majority(self, X: np.ndarray) -> np.ndarray:
+        """Returns the forest prediction for each sample using majority voting."""
+        X = np.asarray(X, dtype=float)
+        out = np.empty(X.shape[0], dtype=np.int64)
+        for i in range(X.shape[0]):
+            out[i] = int(np.argmax(self.votes(X[i])))
+        return out
+
+    def certified_label(self, x: np.ndarray) -> int:
+        """
+        Returns the class that is guaranteed to win (certified) for sample ``x``,
+        or ``-1`` if no class can be guaranteed to win.
+        """
+        lc = np.zeros(self.n_classes, dtype=np.int64)
+        D = self.D
+        for t_idx, tree in enumerate(self.trees):
+            s = tree.decide(x)
+            R_t = D - 1 - t_idx
+            clinch = all(lc[s] >= lc[l] + R_t for l in range(self.n_classes) if l != s)
+            if clinch:
+                return s
+            lc[s] += 1
+        return -1
+
+    def certified_label_cells(self, cells: np.ndarray, taus: list[dict[int, int]]) -> int:
+        """
+        Returns the class that is guaranteed to win for the discretized sample,
+        or ``-1`` if no class can be guaranteed to win.
+        The ``cells`` array contains the discretized values of the features, and the ``taus`` list contains the threshold indices for each tree.
+        """
+        lc = np.zeros(self.n_classes, dtype=np.int64)
+        D = self.D
+        for t_idx, tree in enumerate(self.trees):
+            s = tree.decide_cells(cells, taus[t_idx])
+            R_t = D - 1 - t_idx
+            if all(lc[s] >= lc[l] + R_t for l in range(self.n_classes) if l != s):
+                return s
+            lc[s] += 1
+        return -1
