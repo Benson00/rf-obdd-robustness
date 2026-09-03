@@ -142,7 +142,7 @@ class Forest:
         return len(self.trees)
 
     @property
-    def W(self) -> int:  # noqa: N802
+    def W(self) -> int:  
         """Minimum number of trees needed to win a majority vote."""
         return self.D // 2 + 1
 
@@ -163,7 +163,7 @@ class Forest:
             meta=dict(self.meta),
         )
 
-    # -- reference (non symbolic) semantics -------------------------------- #
+
     def votes(self, x: np.ndarray) -> np.ndarray:
         """Returns the number of votes received by each class for sample ``x``."""
         v = np.zeros(self.n_classes, dtype=np.int64)
