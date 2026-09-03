@@ -22,4 +22,13 @@ class Tree:
         ``lambda_E``: the class index of a leaf, ``-1`` on internal nodes.
     """
 
-    
+    # represent tree as an array. 
+    # each position in the array, represent a node in the tree.
+
+    feature: np.ndarray
+    threshold: np.ndarray
+    left: np.ndarray
+    right: np.ndarray
+    label: np.ndarray
+    root: int = 0
+
