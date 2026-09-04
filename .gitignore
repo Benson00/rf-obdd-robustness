@@ -1,1 +1,4 @@
-/venv
+/.venv
+/rfbdd/__pycache__
+/tests/__pycache__
+/.gitignore
