@@ -3,6 +3,8 @@ import os
 import warnings
 from dataclasses import dataclass, field
 import numpy as np
+import pandas as pd
+from scipy.optimize import linear_sum_assignment
 
 
 @dataclass
@@ -210,3 +212,139 @@ class Forest:
                 return s
             lc[s] += 1
         return -1
+
+
+def _sk_tree_to_tree(sk_tree) -> Tree:
+    """
+    Converts a scikit-learn decision tree into the project's ``Tree`` format.
+
+    It copies the tree structure and converts leaf predictions into class labels.
+    """
+    t = sk_tree.tree_
+    n = t.node_count
+    feature = np.asarray(t.feature, dtype=np.int64).copy()
+    threshold = np.asarray(t.threshold, dtype=np.float64).copy()
+    left = np.asarray(t.children_left, dtype=np.int64).copy()
+    right = np.asarray(t.children_right, dtype=np.int64).copy()
+    value = np.asarray(t.value)          # (n_nodes, 1, n_classes)
+    label = np.full(n, -1, dtype=np.int64)
+    for i in range(n):
+        if left[i] < 0:
+            label[i] = int(np.argmax(value[i, 0]))
+            feature[i] = -1
+            threshold[i] = np.nan
+    return Tree(feature=feature, threshold=threshold, left=left, right=right, label=label)
+
+
+
+def load_forest(path: str, max_trees: int | None = None) -> Forest:
+    """
+    Loads a saved scikit-learn random forest and converts it into a ``Forest``.
+
+    It loads the model, converts each tree using ``_sk_tree_to_tree``, and stores
+    the forest information needed by the rest of the project.
+    ``max_trees`` can be used to load only the first ``k`` trees.
+    """
+    import joblib
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        blob = joblib.load(path)
+    model = blob["model"] if isinstance(blob, dict) else blob
+    trees = [_sk_tree_to_tree(e) for e in model.estimators_]
+    if max_trees is not None:
+        trees = trees[:max_trees]
+    meta = {k: v for k, v in blob.items() if k != "model"} if isinstance(blob, dict) else {}
+    return Forest(
+        trees=trees,
+        n_features=int(model.n_features_in_),
+        n_classes=int(len(model.classes_)),
+        classes=np.asarray(model.classes_),
+        name=str(meta.get("dataset", os.path.basename(path))),
+        meta=meta | {"sklearn_model": model},
+    )
+
+
+
+def recover_label_map(model, X_train: np.ndarray, y_raw) -> dict:
+    """
+    Recovers the mapping between the dataset labels and the model class indices.
+
+    This is needed because the labels in the dataset may use a different order
+    from the class indices used by the scikit-learn model.
+    """
+
+
+    cats = sorted(pd.unique(pd.Series(y_raw)))
+    idx = {c: i for i, c in enumerate(cats)}
+    C = max(len(cats), len(model.classes_))
+    M = np.zeros((C, C))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pred = model.predict(X_train)
+    for a, b in zip((idx[v] for v in y_raw), pred):
+        M[a, b] += 1
+    rows, cols = linear_sum_assignment(-M)
+    return {cats[i]: int(j) for i, j in zip(rows, cols) if i < len(cats)}
+
+
+
+@dataclass
+class Dataset:
+    name: str
+    X_train: np.ndarray
+    y_train: np.ndarray
+    X_test: np.ndarray
+    y_test: np.ndarray
+    feature_names: list[str]
+    label_map: dict
+    sk_test_acc: float
+    stored_test_acc: float
+
+
+def load_dataset(name: str, root: str = "datasets") -> Dataset:
+    """Load ``<name>_train.csv`` / ``<name>_test.csv`` with recovered labels."""
+    
+
+    base = os.path.join(root, name)
+    tr = pd.read_csv(os.path.join(base, f"{name}_train.csv"))
+    te = pd.read_csv(os.path.join(base, f"{name}_test.csv"))
+    forest_blob_path = os.path.join(base, f"{name}_rf.pkl")
+
+    import joblib
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        blob = joblib.load(forest_blob_path)
+    model = blob["model"] if isinstance(blob, dict) else blob
+
+    feature_names = [str(c) for c in tr.columns[:-1]]
+    X_train = tr.iloc[:, :-1].to_numpy(dtype=float)
+    X_test = te.iloc[:, :-1].to_numpy(dtype=float)
+    lm = recover_label_map(model, X_train, tr.iloc[:, -1].tolist())
+    y_train = np.array([lm[v] for v in tr.iloc[:, -1]], dtype=np.int64)
+    y_test = np.array([lm[v] for v in te.iloc[:, -1]], dtype=np.int64)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        acc = float((model.predict(X_test) == y_test).mean())
+    return Dataset(
+        name=name,
+        X_train=X_train,
+        y_train=y_train,
+        X_test=X_test,
+        y_test=y_test,
+        feature_names=feature_names,
+        label_map=lm,
+        sk_test_acc=acc,
+        stored_test_acc=float(blob.get("test_acc", float("nan"))) if isinstance(blob, dict) else float("nan"),
+    )
+
+
+def list_datasets(root: str = "datasets") -> list[str]:
+    """All dataset names under ``root`` that ship a forest pickle."""
+    out = []
+    for d in sorted(os.listdir(root)):
+        p = os.path.join(root, d)
+        if os.path.isdir(p) and os.path.exists(os.path.join(p, f"{d}_rf.pkl")):
+            out.append(d)
+    return out
