@@ -18,6 +18,49 @@ from rfbdd.subsequent_tree import (
     encode_hold,
     encode_subsequent_tree,
 )
+from rfbdd.composition import (
+    setup_composition_manager,
+    compose_forest,
+    extract_winning_regions,
+)
+from rfbdd.frontier import (
+    FrontierElement,
+    LeafNode,
+    DecompositionStats,
+    encode_cube,
+    budgeted_forest,
+    extract_frontier_winning_regions,
+)
+from rfbdd.selectors import (
+    SELECTORS,
+    get_selector,
+    select_by_information_gain,
+    select_by_shapley_value,
+    select_by_association_p_value,
+    select_by_random_node,
+    select_by_modal_variable,
+)
+from rfbdd.readouts import (
+    sat_count,
+    conditional_count,
+    certified_volume,
+    compute_information_gain_ranking,
+    compute_shapley_ranking,
+    compute_association_p_value_ranking,
+)
+from rfbdd.robustness import (
+    sample_to_bits,
+    bits_to_sample_cells,
+    min_switch_diagram,
+    min_switch_frontier,
+    compute_sample_robustness,
+)
+from rfbdd.pipeline import (
+    run_pipeline,
+    find_scaling_wall,
+    PipelineResult,
+    RobustnessSummary,
+)
 
 __all__ = [
     "Tree",
@@ -43,4 +86,35 @@ __all__ = [
     "encode_counter_increment",
     "encode_hold",
     "encode_subsequent_tree",
+    "setup_composition_manager",
+    "compose_forest",
+    "extract_winning_regions",
+    "FrontierElement",
+    "LeafNode",
+    "DecompositionStats",
+    "encode_cube",
+    "budgeted_forest",
+    "extract_frontier_winning_regions",
+    "SELECTORS",
+    "get_selector",
+    "select_by_information_gain",
+    "select_by_shapley_value",
+    "select_by_association_p_value",
+    "select_by_random_node",
+    "select_by_modal_variable",
+    "sat_count",
+    "conditional_count",
+    "certified_volume",
+    "compute_information_gain_ranking",
+    "compute_shapley_ranking",
+    "compute_association_p_value_ranking",
+    "sample_to_bits",
+    "bits_to_sample_cells",
+    "min_switch_diagram",
+    "min_switch_frontier",
+    "compute_sample_robustness",
+    "run_pipeline",
+    "find_scaling_wall",
+    "PipelineResult",
+    "RobustnessSummary",
 ]

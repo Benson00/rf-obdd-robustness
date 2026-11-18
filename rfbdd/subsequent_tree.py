@@ -18,7 +18,7 @@ def encode_geq_offset(
     r_t: int,
     m: int,
 ):
-    """Encode the offset comparator LC^s >= LC^l + R_t using formula chi_M (Definition 9)."""
+    """Encode the offset comparator LC^s >= LC^l + R_t using formula chi_M."""
     # Build carries kappa_j for 1 <= j <= M
     # kappa_j asserts: (b_{j-1}...b_0)_2 >= 2^j - (R_t mod 2^j)
     kappas: list = [bdd.false]  # kappa_0 = false
@@ -79,7 +79,7 @@ def encode_clinch(
     forest: Forest,
     m: int,
 ):
-    """Encode the Clinch_s^(t) predicate (Definition 9)."""
+    """Encode the Clinch_s^(t) predicate."""
     d = forest.D
     w = forest.W
     r_t = d - 1 - t_idx
@@ -148,7 +148,7 @@ def encode_subsequent_tree(
     t_idx: int,
     rho: dict[str, bool] | None = None,
 ):
-    """Encode formula Phi_t for tree T_t (1 <= t <= D - 1) (Definition 10)."""
+    """Encode formula Phi_t for tree T_t (1 <= t <= D - 1)."""
     tree = forest.trees[t_idx]
     taus_t = disc.taus[t_idx]
     n_classes = forest.n_classes
@@ -162,11 +162,25 @@ def encode_subsequent_tree(
     # Hold branch: latches win flags, leaves counters unconstrained
     hold = encode_hold(bdd, n_classes)
 
-    # Step_t branch: disjunction over leaves of T_t
-    step_t = bdd.false
+    # Group leaf paths by class label so input-only path disjunctions simplify first
+    label_paths: dict[int, _bdd.Function] = {}
     for steps, leaf_label in tree.paths():
         pi_b = encode_path_formula(bdd, disc, steps, taus_t, rho=rho)
+        if pi_b != bdd.false:
+            if leaf_label in label_paths:
+                label_paths[leaf_label] |= pi_b
+            else:
+                label_paths[leaf_label] = pi_b
 
+    no_win_bar = bdd.true
+    for l in range(n_classes):
+        no_win_bar &= ~bdd.var(win_flag_name(l, barred=True))
+
+    copies = [encode_counter_copy(bdd, label=l, m=m) for l in range(n_classes)]
+
+    # Step_t branch: disjunction over active leaf classes of T_t
+    step_t = bdd.false
+    for leaf_label, paths_bdd in label_paths.items():
         clinch_s = encode_clinch(bdd, label_s=leaf_label, t_idx=t_idx, forest=forest, m=m)
 
         # Wins branch: win_bar_s = true, others false, counters free
@@ -176,15 +190,12 @@ def encode_subsequent_tree(
                 wins &= ~bdd.var(win_flag_name(other_l, barred=True))
 
         # Incs branch: increment s, copy rivals, all win_bar flags false
-        incs = encode_counter_increment(bdd, label=leaf_label, m=m)
+        incs = encode_counter_increment(bdd, label=leaf_label, m=m) & no_win_bar
         for other_l in range(n_classes):
             if other_l != leaf_label:
-                incs &= encode_counter_copy(bdd, label=other_l, m=m)
-        for l in range(n_classes):
-            incs &= ~bdd.var(win_flag_name(l, barred=True))
+                incs &= copies[other_l]
 
         choice = (clinch_s & wins) | (~clinch_s & incs)
-        step_t |= (pi_b & choice)
+        step_t |= (paths_bdd & choice)
 
     return (won & hold) | (~won & step_t)
-

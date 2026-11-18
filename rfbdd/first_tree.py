@@ -72,6 +72,8 @@ def encode_path_formula(
         tau = taus[node]
         nt = encode_node_test(bdd, disc, f=f, tau=tau, rho=rho)
         pi_b &= nt if branch_dir == 1 else ~nt
+        if pi_b == bdd.false:
+            return bdd.false
     return pi_b
 
 
@@ -88,27 +90,42 @@ def encode_first_tree(
     n_classes = forest.n_classes
     m = compute_counter_width_m(forest.D)
 
-    # Disjunction over all leaves of T_0
-    tree_body = bdd.false
+    # Group leaf paths by class label so input-only path disjunctions simplify first
+    label_paths: dict[int, _bdd.Function] = {}
     for steps, leaf_label in t0.paths():
-        # Path condition pi_b
         pi_b = encode_path_formula(bdd, disc, steps, taus_0, rho=rho)
+        if pi_b != bdd.false:
+            if leaf_label in label_paths:
+                label_paths[leaf_label] |= pi_b
+            else:
+                label_paths[leaf_label] = pi_b
 
-        # Counter of leaf label set to 1
-        c_winner = encode_counter_equals(bdd, leaf_label, 1, m, barred=barred)
+    if forest.D == 1:
+        # Singleton exception: R_0 = 0, Clinch holds immediately
+        tree_body = bdd.false
+        for leaf_label, paths_bdd in label_paths.items():
+            wins = bdd.var(win_flag_name(leaf_label, barred=barred))
+            for other_l in range(n_classes):
+                if other_l != leaf_label:
+                    wins &= ~bdd.var(win_flag_name(other_l, barred=barred))
+            tree_body |= (paths_bdd & wins)
+        return tree_body
 
-        # Counters of all other labels set to 0
-        c_others = bdd.true
-        for other_l in range(n_classes):
-            if other_l != leaf_label:
-                c_others &= encode_counter_equals(bdd, other_l, 0, m, barred=barred)
-
-        tree_body |= (pi_b & c_winner & c_others)
+    zero_counters = [encode_counter_equals(bdd, l, 0, m, barred=barred) for l in range(n_classes)]
+    one_counters = [encode_counter_equals(bdd, l, 1, m, barred=barred) for l in range(n_classes)]
 
     # All win flags forced to false (for D >= 2, single vote cannot win)
     no_win = bdd.true
     for l in range(n_classes):
         no_win &= ~bdd.var(win_flag_name(l, barred=barred))
+
+    tree_body = bdd.false
+    for leaf_label, paths_bdd in label_paths.items():
+        c_state = one_counters[leaf_label]
+        for other_l in range(n_classes):
+            if other_l != leaf_label:
+                c_state &= zero_counters[other_l]
+        tree_body |= (paths_bdd & c_state)
 
     return tree_body & no_win
 

@@ -1,0 +1,11 @@
+Dataset,Total_Trees,Features,Classes,Trees_k,Budget,Selector,Completed,Peak_Acc_Size,Peak_Manager_Size,Leaves,Splits,Runtime_s
+mammo,12,13,2,12,50,modal_variable,True,76,20905,81,80,1.4324
+mammo,12,13,2,12,100,modal_variable,True,134,21915,11,10,0.3694
+mammo,12,13,2,12,50,random_node,True,89,26551,139,138,2.238
+mammo,12,13,2,12,100,random_node,True,143,24590,20,19,0.5314
+mammo,12,13,2,12,50,info_gain,True,83,19275,119,118,1.9434
+mammo,12,13,2,12,100,info_gain,True,130,21153,21,20,0.6168
+mammo,12,13,2,12,50,shapley,True,83,19182,121,120,2.383
+mammo,12,13,2,12,100,shapley,True,130,21280,21,20,0.6796
+mammo,12,13,2,12,50,p_value,True,83,19047,120,119,1.9366
+mammo,12,13,2,12,100,p_value,True,130,21040,21,20,0.5959

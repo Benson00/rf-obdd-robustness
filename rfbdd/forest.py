@@ -10,7 +10,7 @@ from scipy.optimize import linear_sum_assignment
 
 @dataclass
 class Tree:
-    """Single decision tree with array-based node representation (Section 2)."""
+    """Single decision tree with array-based node representation."""
 
     feature: np.ndarray
     threshold: np.ndarray
@@ -69,7 +69,7 @@ class Tree:
 
 @dataclass
 class Forest:
-    """Random forest F = {T_0, ..., T_{D-1}} using majority voting (Section 2)."""
+    """Random forest F = {T_0, ..., T_{D-1}} using majority voting."""
 
     trees: list[Tree]
     n_features: int
